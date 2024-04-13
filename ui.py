@@ -15,21 +15,20 @@ class VIEW3D_PT_blendsync(Panel):
     bl_region_type = "UI" 
 
     bl_category = "Sync" 
-    bl_label = "Scene" 
+    bl_label = "BlendSync" 
     bl_idname = "VIEW3D_PT_blendsync" 
     
     def draw(self, context):
         layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation
         scn = context.scene
         wm_syncprops = context.window_manager.blendsync
         
         # Connection status and OPs
-        split = layout.split(factor=0.4)
-        split.label(text="Server")
-        split.prop(wm_syncprops, 'server_addr', text="")
-        split = layout.split(factor=0.4)
-        split.label(text="Port")
-        split.prop(wm_syncprops, 'server_port', text="")
+        layout.prop(wm_syncprops, 'server_addr')
+        layout.prop(wm_syncprops, 'server_port_cli2srv')
+        layout.prop(wm_syncprops, 'server_port_srv2cli')
         row = layout.row()
         row.operator(BLENDSYNC_OT_connect.bl_idname, icon ="PLUS")
         
@@ -41,22 +40,37 @@ class OBJECT_PT_blendsync(Panel):
     bl_region_type = "WINDOW"
     bl_label = "BlendSync"
     bl_context = "object"
-    
-    @classmethod
-    def poll(cls, context):
-        return True
-    
+        
     def draw(self, context):
         layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation
         scn = context.scene
         obj = context.object
         wm_syncprops = context.window_manager.blendsync
 
-        # Frame List
-        row = layout.row()
-        row.label("Send")
-        row = layout.row()
-        row.label("Receive")
+        # Subpanels for send and receive
+        header, panel = self.layout.panel('blendsync_send', default_closed=False)
+        header.use_property_split=False
+        header.prop(obj.blendsync, 'send_enabled', text='')
+        header.label(text="Send")
+        if panel:
+            panel.enabled=obj.blendsync.send_enabled
+            layout.prop(obj.blendsync, 'send_path')
+            split = layout.split(factor=0.4)
+            split.label(text='')
+            split.operator(BLENDSYNC_OT_publish.bl_idname)
+            
+        header, panel = self.layout.panel('blendsync_recv', default_closed=False)
+        header.use_property_split=False
+        header.prop(obj.blendsync, 'recv_enabled', text='')
+        header.label(text="Receive")
+        if panel:
+            panel.enabled=obj.blendsync.recv_enabled
+            layout.prop(obj.blendsync, 'recv_path')
+            split = layout.split(factor=0.4)
+            split.label(text='')
+            split.operator(BLENDSYNC_OT_subscribe.bl_idname)
 
 
 
@@ -66,6 +80,7 @@ class OBJECT_PT_blendsync(Panel):
 
 classes =(
     VIEW3D_PT_blendsync,
+    OBJECT_PT_blendsync,
 )
 
 def register():

@@ -26,7 +26,7 @@ class Client:
     connected = False
     is_host = False
     
-    def connect(address='127.0.0.1', port_pub=PORT_SERVER_RECV, port_sub=PORT_SERVER_SEND) -> bool:
+    def connect(address='127.0.0.1', port_pub=PORT_SERVER_RECV, port_sub=PORT_SERVER_SEND, launch_server=False) -> bool:
         """Establesh a connection to the sync server"""
         global context
         
@@ -37,8 +37,6 @@ class Client:
         if address == '127.0.0.1' and isPortAvailable(port_pub):
             ProxyServer.launch(port_pub, port_sub)
             Client.is_host = True
-            # Wait for server to start up TODO not needed when host doesn't connect to proxy itself
-            time.sleep(0.5)
             
         #else:
 
@@ -58,6 +56,9 @@ class Client:
             
         print(f"Error: Can't connect to server {address}:{port_pub}")
         return False
+
+    def launchServer(port_pub, port_sub) -> bool:
+        return True
 
 
     def disconnect():

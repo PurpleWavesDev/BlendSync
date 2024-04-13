@@ -2,22 +2,33 @@ import bpy
 from bpy.types import Scene, Object, WindowManager, PropertyGroup
 from bpy.props import *
 
-from .network import Client
+from .network import Client, PORT_SERVER_RECV, PORT_SERVER_SEND
 
 
 ## Poll functions
-def IsSyncActive(self, obj):
-    return True #obj.
+
+## Update callbacks
+def SendUpdate(self, context):
+    pass
+
+def ReceiveUpdate(self, context):
+    pass
+
 
 ## Property classes
 class BlendSync_Props(PropertyGroup):
     connected: BoolProperty(get=lambda self: Client.connected)
     # Settings
-    server_addr: StringProperty(default="localhost", name="Server")
-    server_port: IntProperty(default=4250, name="Port")
+    server_addr: StringProperty(default="127.0.0.1", name="Server")
+    server_port_cli2srv: IntProperty(default=PORT_SERVER_RECV, name="Client to Server Port")
+    server_port_srv2cli: IntProperty(default=PORT_SERVER_SEND, name="Server to Client Port")
     
 class BlendSync_Object(PropertyGroup):
-    pass
+    send_enabled: BoolProperty(default=False, name="Send", update=SendUpdate)
+    recv_enabled: BoolProperty(default=False, name="Receive", update=ReceiveUpdate)
+    
+    send_path: StringProperty(default="", name="OSC Path")
+    recv_path: StringProperty(default="", name="OSC Path")
 
 
 classes = (
@@ -31,12 +42,6 @@ def register():
     for cls in classes:
         register_class(cls)
     
-    # Register custom objects (defined thorugh pollers)
-    #Scene.blendsync_active = bpy.props.PointerProperty(
-    #    type=bpy.types.Object,
-    #    poll=IsSyncActive
-    #)
-
     # Assign properties
     WindowManager.blendsync = PointerProperty(type=BlendSync_Props, name="BlendSync Properties")
     Object.blendsync = PointerProperty(type=BlendSync_Object, name="BlendSync Object")

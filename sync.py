@@ -23,6 +23,8 @@ class BLENDSYNC_OT_connect(Operator):
     bl_description = "(Re-)Connects to the blendsync server"
     bl_options = {'REGISTER', 'UNDO'}
     
+    launch_server = BoolProperty(default=False, name="Launch Server")
+    
     @classmethod
     def poll(cls, context):
         return True
@@ -32,13 +34,91 @@ class BLENDSYNC_OT_connect(Operator):
         scn = context.scene
         wm_syncprops = context.window_manager.blendsync
         
-        Client.connect() # TODO Properties
+        Client.connect(wm_syncprops.server_addr, wm_syncprops.server_port_cli2srv, wm_syncprops.server_port_srv2cli, self.launch_server)
         
         # Return finished if connected successfully 
         if wm_syncprops.connected:
             return{'FINISHED'}
 
-        self.report({"WARNING"}, f"Can't establish a connection to server {wm_syncprops.server_addr}:{wm_syncprops.server_port}")
+        self.report({"WARNING"}, f"Can't establish a connection to server {wm_syncprops.server_addr}:{wm_syncprops.server_port_cli2srv}")
+        return{'CANCELLED'}
+    
+class BLENDSYNC_OT_launch(Operator):
+    """Launches the Blendsync Server, instance becomes host"""
+    bl_label = "Launch Server"
+    bl_idname = "blendsync.launch"
+    bl_description = "Launches the Blendsync Server, instance becomes host"
+    bl_options = {'REGISTER'}
+    
+    launch_server = BoolProperty(default=False, name="Launch Server")
+    
+    @classmethod
+    def poll(cls, context):
+        return not context.window_manager.blendsync.connected
+
+    def execute(self, context):
+        obj = context.object
+        scn = context.scene
+        wm_syncprops = context.window_manager.blendsync
+        
+        Client.launchServer(wm_syncprops.server_port_cli2srv, wm_syncprops.server_port_srv2cli) # TODO
+        
+        # Return finished if connected successfully 
+        if wm_syncprops.connected:
+            return{'FINISHED'}
+
+        self.report({"WARNING"}, f"Unable to launch server on ports {wm_syncprops.server_port_cli2srv} and {wm_syncprops.server_port_srv2cli}")
+        return{'CANCELLED'}
+
+
+class BLENDSYNC_OT_publish(Operator):
+    """Publishes a channel or object to all other instances"""
+    bl_label = "Publish"
+    bl_idname = "blendsync.publish"
+    bl_description = "Publishes an channel to all other instances"
+    bl_options = {'REGISTER'}
+    
+    @classmethod
+    def poll(cls, context):
+        return context.object.blendsync.send_enabled
+
+    def execute(self, context):
+        obj = context.object
+        scn = context.scene
+        wm_syncprops = context.window_manager.blendsync
+        
+        # Connect first if no connection has been established
+        if wm_syncprops.connected:
+            
+            
+            return{'FINISHED'}
+
+        self.report({"WARNING"}, f"No connection established")
+        return{'CANCELLED'}
+    
+class BLENDSYNC_OT_subscribe(Operator):
+    """Subscribes to an object or channel of another instance as soon as will be published"""
+    bl_label = "Subscribe"
+    bl_idname = "blendsync.subscribe"
+    bl_description = "Subscribes to an object or channel of another instance as soon as will be published"
+    bl_options = {'REGISTER', 'UNDO'}
+        
+    @classmethod
+    def poll(cls, context):
+        return context.object.blendsync.recv_enabled
+
+    def execute(self, context):
+        obj = context.object
+        scn = context.scene
+        wm_syncprops = context.window_manager.blendsync
+        
+        # Connect first if no connection has been established
+        if wm_syncprops.connected:
+            
+            
+            return{'FINISHED'}
+
+        self.report({"WARNING"}, f"No connection established")
         return{'CANCELLED'}
 
 
@@ -66,6 +146,8 @@ def timerCallback():
 
 classes = (
     BLENDSYNC_OT_connect,
+    BLENDSYNC_OT_publish,
+    BLENDSYNC_OT_subscribe,
 )
 
 def register():
