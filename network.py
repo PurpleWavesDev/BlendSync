@@ -1,16 +1,18 @@
 from threading import Thread, Lock
 import queue
 import socket
-import zmq
 import time
+import zmq
+import struct
+import pickle
 
 import bpy
 from .server import LaunchServer, StopServer
 
 # Constants
 PING_INTERVAL = 10
-PORT_SERVER_RECV = 5012
-PORT_SERVER_SEND = 5013
+PORT_SERVER_RECV = 42522
+PORT_SERVER_SEND = 42533
 
 # Globals
 context = None
@@ -37,19 +39,22 @@ class Client:
             Client.is_host = True
             # Wait for server to start up TODO not needed when host doesn't connect to proxy itself
             time.sleep(0.5)
-
+            
         #else:
+
+        # Launch receiver
+        Client.connected = True
+        Receiver.launch(address, port_sub)
+        
         # Connect to server
         Client.socket = context.socket(zmq.PUB)
         Client.socket.connect(f"tcp://{address}:{port_pub}")
-        
+                
         # Try to init connectionSend an init message and wait for answer
-        if Client.init():
-            # Launch receiver
-            Receiver.launch(address, port_sub)
-            # Launch ping timer
-            bpy.app.timers.register(Client.ping, first_interval=PING_INTERVAL)
-            return True
+        #bpy.app.timers.register(Client.ping, first_interval=PING_INTERVAL)
+        time.sleep(1)
+        Client.sendOsc(b'/scene/cube/location', [0.0, 1.0, 2.0])
+        return True
             
         print(f"Error: Can't connect to server {address}:{port_pub}")
         return False
@@ -57,8 +62,8 @@ class Client:
 
     def disconnect():
         # Unregister ping function
-        if bpy.app.timers.is_registered(Client.ping):
-            bpy.app.timers.unregister(Client.ping)
+        #if bpy.app.timers.is_registered(Client.ping):
+        #    bpy.app.timers.unregister(Client.ping)
 
         # Only close with an active connection
         if Client.connected:
@@ -67,60 +72,29 @@ class Client:
             # Wait for receiver to finish
             Receiver.join()
     
-    def init():
-        Client.socket.send(b"Init")
-        Client.connected = True
-        return Client.connected
 
-    def sync(data_path, dtype, value, reconnect=True, force=False):
-        if not Client.connected and reconnect:
-            # Try to connect
-            bpy.ops.blendsync.connect()
-            
-        if Client.connected or force:
+    def sendOsc(data_path: bytes, obj):
+        if Client.connected:
             # Send message
             try:
-                ipc.send(Client.socket, message) # TODO
+                Client.socket.send_multipart([data_path, pickle.dumps(obj, pickle.HIGHEST_PROTOCOL)])
+                
             except Exception as err:
                 print(f"Error: Sync communication {str(err)}")
                 Client.disconnect()
     
-    def ping():
-        """Ping timer gets reset every time a message is received. Function is called when timeout is exceeded"""
-        if Client.connected:
-            print("Error: Ping timeout")
-            #Client.disconnect()
-        
-        # Stop timer
-        return None
 
 
 class Receiver:
     """Receiver thread to receive and process sync commands of other instances"""
     thread = None
-    lock = Lock()
     queue = queue.Queue()
     
     def registerSync(obj: bpy.types.Object, address: str) -> int:
-        #serviceRemoveReq(image_name)
-        id, _  = serviceGetReq(image_name)
-        
-        # Add new ID
-        if id is None:
-            id = request_count
-            request_count += 1
-        
-        image_requests[id] = (image_name, False)
-        return id
+        pass
 
-    def unregisterSync(obj: bpy.types.Object):
-        global image_requests
-        global request_count
-        
-        # Delete old entry
-        old_ids = [id for id, data in image_requests.items() if data[0] == image_name]
-        for id in old_ids:
-            del image_requests[id]
+    def unregisterSync(obj: bpy.types.Object):        
+        pass
         
     def launch(address, port_sub):
         Receiver.thread = Thread(target=Receiver.run, args=(address, port_sub))
@@ -135,57 +109,73 @@ class Receiver:
     def run(address, port_sub):
         global context
 
-        # Setup socket
-        recv_sock = context.socket(zmq.SUB)
-        recv_sock.connect(f"tcp://{address}:{port_sub}")
-        # Set timeout and disconnect after timeout option TODO
-        recv_sock.setsockopt(zmq.LINGER, 0)
+        # Setup sockets
+        osc_sock = context.socket(zmq.SUB)
+        osc_sock.connect(f"tcp://{address}:{port_sub}")
         # Filter TODO
-        #topicfilter = "10001"
-        #recv_sock.setsockopt(zmq.SUBSCRIBE, topicfilter)
+        osc_sock.setsockopt(zmq.SUBSCRIBE, b'/')
 
         # Poller
         poller = zmq.Poller()
-        poller.register(recv_sock, zmq.POLLIN)
+        poller.register(osc_sock, zmq.POLLIN)
         
         while Client.connected:
             # Poll loop
             if poller.poll(100):
                 # Data received
-                osc_msg = recv_sock.recv()
-                print("Sub: " + osc_msg)
-
-                #try:
-                #    id, img_data = receive_array(recv_sock)
-                #    with Receiver.lock:
-                #        pass
-                #    
-                #except Exception as e:
-                #    print(f"Error: Can't read received data ({str(e)})")
+                
+                if True:#(poller.pollin(0)): # OSC Message TODO pollin does not exist
+                    # Parse message
+                    try:
+                        data = osc_sock.recv_multipart()
+                        osc_msg, osc_data = data[0], pickle.loads(data[1])
+                        
+                        # Store in queue
+                        print(f"OSC: {osc_msg} {osc_data}")
+                        Receiver.queue.put_nowait((osc_msg, osc_data))
+                        
+                        # Register timer
+                        if not bpy.app.timers.is_registered(Receiver.updateOnMainthread):
+                            bpy.app.timers.register(Receiver.updateOnMainthread)
+                        
+                    except Exception as e:
+                        print(f"Error: Can't read received data ({str(e)})")
     
         # Clean up connection
-        recv_sock.close()
+        osc_sock.close()
 
 
     def updateOnMainthread():
         """Blender data must be updated from the main thread. A timer function is called from the main thread, thus updates can happen here"""
         while not Receiver.queue.empty():
-            with Receiver.lock:
-                path, data = Receiver.queue.get()
+            osc_msg, osc_data = Receiver.queue.get()
+            # Path from other instances is /<scene>/<obj>/channel
+            
+            # Check if there is an object with this name
+            obj_name, prop_name = osc_msg.decode("utf-8").rsplit('/', 1)
+            if obj_name != "" and not obj_name in bpy.data.objects:
+                # Create empty
+                empty = bpy.data.objects.new(obj_name, None)
+                empty.use_fake_user = True
             
             # Update hidden empties
-            # Check if there is an object
-            if path in bpy.data.objects:
-                # Update image
-                bpy.data.images[image_requests[id][0]].pixels.foreach_set(pix_data)
-                # Set update flag and mark as received
-                bpy.data.images[image_requests[id][0]].update_tag()
-                image_requests[id] = (image_requests[id][0], True)
-            else:
-                # Create empty
-                pass
+            try:
+                obj = bpy.data.objects[obj_name]
+                # Find and update channel
+                match prop_name:
+                    case 'location':
+                        obj.location = osc_data
+                    case 'rotation':
+                        obj.rotation_euler = osc_data
+                    case 'scale':
+                        obj.scale = osc_data
+                    case _:
+                        obj[prop_name] = osc_data
+            except Exception as e:
+                print(f"Error: Can't set property '{prop_name}': {str(e)}")
             
-            # Update objects
+            # Dispatch
+            
             
         return None
 
@@ -209,22 +199,19 @@ class ProxyServer:
         global context
         
         ProxyServer.running = True
-        sub_sock = context.socket(zmq.XSUB)
-        pub_sock = context.socket(zmq.XPUB)
+        sub_sock = context.socket(zmq.SUB)
+        sub_sock.setsockopt(zmq.SUBSCRIBE, b'')
+        pub_sock = context.socket(zmq.PUB)
         sub_sock.bind(f"tcp://*:{port_xsub}")
         pub_sock.bind(f"tcp://*:{port_xpub}")
 
         # Poller
         poller = zmq.Poller()
         poller.register(sub_sock, zmq.POLLIN)
-        
         while ProxyServer.running:
             # Poll loop
-            if poller.poll(500):
-                osc_msg = sub_sock.recv()
-                print("Proxy: " + osc_msg)
-                if osc_msg is not None:
-                    pub_sock.send(osc_msg)
+            if poller.poll(100):
+                pub_sock.send_multipart(sub_sock.recv_multipart())
 
 
 
