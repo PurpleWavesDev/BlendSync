@@ -30,17 +30,17 @@ def checkDependencies():
 def register():
     checkDependencies()
     
-    from . import client, properties, sync, ui
+    from . import properties, network, sync, ui
     properties.register()
-    client.register()
+    network.register()
     sync.register()
     ui.register()
 
 def unregister():
-    from . import client, properties, sync, ui
+    from . import properties, network, sync, ui
     ui.unregister()
     sync.unregister()
-    client.unregister()
+    network.unregister()
     properties.unregister()
 
 

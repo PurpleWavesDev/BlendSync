@@ -2,7 +2,7 @@ import bpy
 from bpy.types import Panel, Menu
 
 from .sync import *
-from .client import *
+from .network import *
 
 
 # -------------------------------------------------------------------

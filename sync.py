@@ -5,7 +5,7 @@ from bpy.props import *
 from bpy.types import Operator, Panel, PropertyGroup, UIList
 
 from . import properties as props
-from .client import *
+from .network import *
 
 
 # -------------------------------------------------------------------

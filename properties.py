@@ -2,7 +2,7 @@ import bpy
 from bpy.types import Scene, Object, WindowManager, PropertyGroup
 from bpy.props import *
 
-from .client import Client
+from .network import Client
 
 
 ## Poll functions
