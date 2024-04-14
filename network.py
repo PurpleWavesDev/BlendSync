@@ -11,8 +11,8 @@ from .server import LaunchServer, StopServer
 
 # Constants
 PING_INTERVAL = 10
-PORT_SERVER_RECV = 42522
-PORT_SERVER_SEND = 42533
+PORT_SERVER_RECV = 8000
+PORT_SERVER_SEND = 7000
 
 # Globals
 context = None

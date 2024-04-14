@@ -19,11 +19,12 @@ import bpy
 
 def checkDependencies():
     # Check dependencies and install if needed
-    try:
-        import zmq
-    except:
-        import pip
-        pip.main(['install', 'pyzmq', '--user'])
+    import pip
+    try: import zmq
+    except: pip.main(['install', 'pyzmq', '--user'])
+    
+    try: import oscpy
+    except: pip.main(['install', 'oscpy', '--user'])
 
 
 
