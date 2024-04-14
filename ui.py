@@ -25,12 +25,26 @@ class VIEW3D_PT_blendsync(Panel):
         scn = context.scene
         wm_syncprops = context.window_manager.blendsync
         
-        # Connection status and OPs
+        # Connection status
+        if wm_syncprops.connected:
+            layout.label(text=f"Connected to {Client.address}", icon="PROP_ON")
+            layout.label(text=f"Ports: {Client.port_pub} (send), {Client.port_sub} (recv)")
+            if Client.is_host: layout.label(text="Instance is hosting server")
+        else:
+            layout.label(text="Disconnected", icon="PROP_OFF")
+        layout.separator()
+        
+        # Connection OPs
         layout.prop(wm_syncprops, 'server_addr')
         layout.prop(wm_syncprops, 'server_port_cli2srv')
         layout.prop(wm_syncprops, 'server_port_srv2cli')
-        row = layout.row()
-        row.operator(BLENDSYNC_OT_connect.bl_idname, icon ="PLUS")
+        row = layout.row(align=True)
+        row.operator(BLENDSYNC_OT_connect.bl_idname, icon="URL").launch_server = False
+        row.operator(BLENDSYNC_OT_connect.bl_idname, text="Launch server", icon="QUIT").launch_server = True
+        layout.separator()
+        
+        # Data management
+        layout.operator(BLENDSYNC_OT_clearProxies.bl_idname, icon="CANCEL")
         
 
 class OBJECT_PT_blendsync(Panel):

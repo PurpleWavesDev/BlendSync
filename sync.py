@@ -23,9 +23,9 @@ class BLENDSYNC_OT_connect(Operator):
     bl_label = "Connect"
     bl_idname = "blendsync.connect"
     bl_description = "(Re-)Connects to the blendsync server"
-    bl_options = {'REGISTER', 'UNDO'}
+    bl_options = {'REGISTER'}
     
-    launch_server = BoolProperty(default=False, name="Launch Server")
+    launch_server: BoolProperty(default=True, name="Launch Server")
     
     @classmethod
     def poll(cls, context):
@@ -44,33 +44,44 @@ class BLENDSYNC_OT_connect(Operator):
 
         self.report({"WARNING"}, f"Can't establish a connection to server {wm_syncprops.server_addr}:{wm_syncprops.server_port_cli2srv}")
         return{'CANCELLED'}
-    
-class BLENDSYNC_OT_launch(Operator):
-    """Launches the Blendsync Server, instance becomes host"""
-    bl_label = "Launch Server"
-    bl_idname = "blendsync.launch"
-    bl_description = "Launches the Blendsync Server, instance becomes host"
-    bl_options = {'REGISTER'}
-    
-    launch_server = BoolProperty(default=False, name="Launch Server")
-    
-    @classmethod
-    def poll(cls, context):
-        return not context.window_manager.blendsync.connected
 
+## TODO: Actually not needed, connect OP can also launch server
+#class BLENDSYNC_OT_launch(Operator):
+#    """Launches the blendsync server, instance becomes host"""
+#    bl_label = "Launch Server"
+#    bl_idname = "blendsync.launch"
+#    bl_description = "Launches the blendsync server, instance becomes host"
+#    bl_options = {'REGISTER'}
+#        
+#    @classmethod
+#    def poll(cls, context):
+#        return not Client.connected
+#
+#    def execute(self, context):
+#        wm_syncprops = context.window_manager.blendsync
+#        
+#        # Return finished if start is successful
+#        if Client.launchServer(wm_syncprops.server_port_cli2srv, wm_syncprops.server_port_srv2cli):
+#            return{'FINISHED'}
+#
+#        self.report({"WARNING"}, f"Can't launch server on ports {wm_syncprops.server_port_cli2srv} and {wm_syncprops.server_port_srv2cli}")
+#        return{'CANCELLED'}
+
+
+class BLENDSYNC_OT_clearProxies(Operator):
+    """Removes all OSC proxy objects"""
+    bl_label = "Clear Proxies"
+    bl_idname = "blendsync.clear_proxies"
+    bl_description = "Removes all OSC proxy objects"
+    bl_options = {'REGISTER', 'UNDO'}
+    
     def execute(self, context):
-        obj = context.object
-        scn = context.scene
-        wm_syncprops = context.window_manager.blendsync
-        
-        Client.launchServer(wm_syncprops.server_port_cli2srv, wm_syncprops.server_port_srv2cli) # TODO
-        
-        # Return finished if connected successfully 
-        if wm_syncprops.connected:
-            return{'FINISHED'}
-
-        self.report({"WARNING"}, f"Unable to launch server on ports {wm_syncprops.server_port_cli2srv} and {wm_syncprops.server_port_srv2cli}")
-        return{'CANCELLED'}
+        for obj in bpy.data.objects:
+            if obj.is_osc_proxy:
+                obj.use_fake_user = False
+                bpy.data.objects.remove(obj)
+                
+        return{'FINISHED'}
 
 
 class OBJECT_OT_blendsyncPublish(Operator):
@@ -88,6 +99,10 @@ class OBJECT_OT_blendsyncPublish(Operator):
         obj = context.object
         scn = context.scene
         wm_syncprops = context.window_manager.blendsync
+        
+        # Check connection
+        if not Client.connected:
+            Client.connect(launch_server=True) # TODO Default ports or from props?
         
         # Only works when a connection is established
         if wm_syncprops.connected:
@@ -114,6 +129,10 @@ class OBJECT_OT_blendsyncPoll(Operator):
     def execute(self, context):
         obj = context.object
         scn = context.scene
+        
+        # Check connection
+        if not Client.connected:
+            Client.connect(launch_server=True) # TODO Default ports or from props?
         
         if not obj.blendsync.poll:
             # Add to poll list
@@ -181,6 +200,7 @@ def SendUpdate(self, context):
         # Check connection
         if not Client.connected:
             Client.connect(launch_server=True) # TODO Default ports or from props?
+        
         # Register object props
         enableSync(obj.blendsync.send_path+'/location', obj, 'location')
         enableSync(obj.blendsync.send_path+'/rotation', obj, 'rotation_euler')
@@ -197,6 +217,7 @@ def ReceiveUpdate(self, context):
         # Check connection
         if not Client.connected:
             Client.connect(launch_server=True)
+        
         # Register object props
         Receiver.registerSync(obj, 'location', obj.blendsync.recv_path+'/location')
         Receiver.registerSync(obj, 'rotation_euler', obj.blendsync.recv_path+'/rotation')
@@ -221,6 +242,7 @@ def UpdateRecvPath(self, context):
 
 classes = (
     BLENDSYNC_OT_connect,
+    BLENDSYNC_OT_clearProxies,
     OBJECT_OT_blendsyncPublish,
     OBJECT_OT_blendsyncPoll,
 )

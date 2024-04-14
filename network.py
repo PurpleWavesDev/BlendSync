@@ -25,6 +25,9 @@ class Client:
     socket = None
     connected = False
     is_host = False
+    address=""
+    port_pub=0
+    port_sub=0
     
     def connect(address='127.0.0.1', port_pub=PORT_SERVER_RECV, port_sub=PORT_SERVER_SEND, launch_server=False) -> bool:
         """Establesh a connection to the sync server"""
@@ -42,14 +45,17 @@ class Client:
                 print(f"Error: Local server is not running")
                 return False
             
-        # Launch receiver
         Client.connected = True
+        Client.address = address
+        Client.port_pub = port_pub
+        Client.port_sub = port_sub
+        # Launch receiver
         Receiver.launch(address, port_sub)
         
         # Connect to server
         Client.socket = context.socket(zmq.PUB)
         Client.socket.connect(f"tcp://{address}:{port_pub}")
-                
+        
         # Ping timer (?)
         #bpy.app.timers.register(Client.ping, first_interval=PING_INTERVAL)
         return True
