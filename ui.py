@@ -29,7 +29,7 @@ class VIEW3D_PT_blendsync(Panel):
         if wm_syncprops.connected:
             layout.label(text=f"Connected to {Client.address}", icon="PROP_ON")
             layout.label(text=f"Ports: {Client.port_pub} (send), {Client.port_sub} (recv)")
-            if Client.is_host: layout.label(text="Instance is hosting server")
+            if Client.is_host: layout.label(text=f"Instance is host (IP {getHostname()})")
         else:
             layout.label(text="Disconnected", icon="PROP_OFF")
         layout.separator()

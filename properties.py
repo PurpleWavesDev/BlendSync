@@ -24,8 +24,8 @@ class BlendSync_Object(PropertyGroup):
     send_enabled: BoolProperty(default=False, name="Send", update=SendUpdate)
     recv_enabled: BoolProperty(default=False, name="Receive", update=ReceiveUpdate)
     
-    send_path: StringProperty(name="OSC Path", default="/blend", update=UpdateSendPath, search=getOscPaths)
-    recv_path: StringProperty(name="OSC Path", default="/blend", update=UpdateRecvPath, search=getOscPaths)
+    send_path: StringProperty(name="OSC Send Path", default="/blend", update=UpdateSendPath, search=getOscPaths)
+    recv_path: StringProperty(name="OSC Receive Path", default="/blend", update=UpdateRecvPath, search=getOscPaths)
     poll: BoolProperty(default=False, name="Path Poll")
 
 

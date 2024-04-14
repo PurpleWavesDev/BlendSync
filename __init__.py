@@ -1,5 +1,5 @@
-# Blender Stop Motion Virtual Production Extension
-# Kira Vogt
+# BlendSync - Bleneder Add-on for synchronizing Objects and Devices via OSC
+# Developed by Kira Vogt
 
 bl_info = {
         "name": "BlendSync",
@@ -7,7 +7,7 @@ bl_info = {
         "author": "Kira Vogt",
         "version": (0, 1, 0),
         "blender": (4, 0, 0),
-        "location": "3D View > Sidebar > ??",
+        "location": "3D View > Sidebar > Sync",
         "warning": "",
         "wiki_url": "",
         "tracker_url": "",
@@ -21,10 +21,10 @@ def checkDependencies():
     # Check dependencies and install if needed
     import pip
     try: import zmq
-    except: pip.main(['install', 'pyzmq', '--user'])
+    except: pip.main(['install', 'pyzmq', '--user', '--no-warn-script-location'])
     
     try: import oscpy
-    except: pip.main(['install', 'oscpy', '--user'])
+    except: pip.main(['install', 'oscpy', '--user', '--no-warn-script-location'])
 
 
 

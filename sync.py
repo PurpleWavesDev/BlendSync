@@ -70,7 +70,7 @@ class BLENDSYNC_OT_connect(Operator):
 
 class BLENDSYNC_OT_clearProxies(Operator):
     """Removes all OSC proxy objects"""
-    bl_label = "Clear Proxies"
+    bl_label = "Clear Proxy Objects"
     bl_idname = "blendsync.clear_proxies"
     bl_description = "Removes all OSC proxy objects"
     bl_options = {'REGISTER', 'UNDO'}

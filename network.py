@@ -5,9 +5,10 @@ import time
 import zmq
 import struct
 import pickle
+from oscpy.server import OSCThreadServer
 
 import bpy
-from .server import LaunchServer, StopServer
+
 
 # Constants
 PING_INTERVAL = 10
@@ -39,8 +40,7 @@ class Client:
         # Launch service if on localhost and port is available
         if address == '127.0.0.1' and isPortAvailable(port_pub):
             if launch_server:
-                ProxyServer.launch(port_pub, port_sub)
-                Client.is_host = True
+                Client.launchServer(port_pub, port_sub)
             else:
                 print(f"Error: Local server is not running")
                 return False
@@ -50,7 +50,7 @@ class Client:
         Client.port_pub = port_pub
         Client.port_sub = port_sub
         # Launch receiver
-        Receiver.launch(address, port_sub)
+        Receiver.launch(address, port_sub, Client.is_host)
         
         # Connect to server
         Client.socket = context.socket(zmq.PUB)
@@ -60,7 +60,9 @@ class Client:
         #bpy.app.timers.register(Client.ping, first_interval=PING_INTERVAL)
         return True
 
-    def launchServer(port_pub, port_sub) -> bool:
+    def launchServer(port_xsub, port_xpub) -> bool:
+        ProxyServer.launch(port_xsub, port_xpub)
+        Client.is_host = True
         return True
 
 
@@ -99,9 +101,11 @@ class Client:
 class Receiver:
     """Receiver thread to receive and process sync commands of other instances"""
     thread = None
+    osc_server = None
     sync_props = {}
     poll_objects = {}
     queue = queue.Queue()
+    register_lock = Lock()
     
     def registerSync(obj: bpy.types.Object, prop: str, address: str) -> int:
         Receiver.sync_props[(obj, prop)] = address
@@ -121,14 +125,37 @@ class Receiver:
         except:
             pass            
         
-    def launch(address, port_sub):
+    def launch(address, port_sub, is_host=False):
         Receiver.thread = Thread(target=Receiver.run, args=(address, port_sub))
         Receiver.thread.start()
+        
+        ## Additional OSC server TODO: Own protocol should be OSC compatible instead of having extra server running
+        if is_host:
+            Receiver.osc_server = OSCThreadServer(default_handler=Receiver.oscHandler)
+            Receiver.osc_server.listen(address="0.0.0.0", port=port_sub+1, default=True)
 
         
     def join():
+        if Receiver.osc_server is not None:
+            Receiver.osc_server.stop()
+            
         if Receiver.thread is not None:
             Receiver.thread.join()
+
+    def oscHandler(address, *values):
+        address = address.decode('utf8')
+        data = [v.decode('utf8') if isinstance(v, bytes) else v\
+            for v in values if values]
+        data = data[0] if len(data) == 1 else data
+        
+        # Store in queue
+        Receiver.queue.put_nowait((address, data))
+                                
+        # Register timer
+        with Receiver.register_lock:
+            if not bpy.app.timers.is_registered(Receiver.updateOnMainthread):
+                bpy.app.timers.register(Receiver.updateOnMainthread)
+
 
 
     def run(address, port_sub):
@@ -153,14 +180,15 @@ class Receiver:
                     if True:#(poller.pollin(0)): # OSC Message TODO pollin does not exist
                         # Parse message
                         data = osc_sock.recv_multipart()
-                        osc_msg, osc_data = data[0], pickle.loads(data[1])
+                        osc_msg, osc_data = data[0].decode("utf-8"), pickle.loads(data[1])
                         
-                        # Store in queue
+                        # Store in queue 
                         Receiver.queue.put_nowait((osc_msg, osc_data))
                         
                         # Register timer
-                        if not bpy.app.timers.is_registered(Receiver.updateOnMainthread):
-                            bpy.app.timers.register(Receiver.updateOnMainthread)
+                        with Receiver.register_lock:
+                            if not bpy.app.timers.is_registered(Receiver.updateOnMainthread):
+                                bpy.app.timers.register(Receiver.updateOnMainthread)
                                         
                 except Exception as e:
                     print(f"Error: Can't read received data ({str(e)})")
@@ -174,10 +202,7 @@ class Receiver:
         while not Receiver.queue.empty():
             osc_msg, osc_data = Receiver.queue.get()
             # Path from other instances is /<scene>/<obj>/channel
-            
-            # Check if there is an object with this name
-            osc_msg = osc_msg.decode("utf-8")
-            
+                        
             if osc_msg[0] == '/':
                 ## OSC Message
                 obj_name, prop_name = osc_msg.rsplit('/', 1)
@@ -197,6 +222,11 @@ class Receiver:
                             obj.scale = osc_data
                         case _:
                             obj[prop_name] = osc_data
+                    obj.update_tag()
+                    bpy.types.Scene.update_tag()
+                    bpy.types.Scene.update_render_engine()
+                    bpy.context.view_layer.update()
+                    
                 except Exception as e:
                     print(f"Error: Can't set property '{prop_name}': {str(e)}")
                 
@@ -280,9 +310,14 @@ class ProxyServer:
 # Helpers
 # -------------------------------------------------------------------        
 def getHostname() -> str:
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.connect(('8.8.8.8', 1))  # connect() for UDP doesn't send packets
-    return s.getsockname()[0]
+    try:
+        # "static" variable to avoid recalling connect every time
+        return getHostname.host_name
+    except:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('8.8.8.8', 1))  # connect() for UDP doesn't send packets
+        getHostname.host_name = s.getsockname()[0]
+        return getHostname.host_name
 
 def isPortAvailable(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
