@@ -59,7 +59,7 @@ class OBJECT_PT_blendsync(Panel):
             layout.prop(obj.blendsync, 'send_path')
             split = layout.split(factor=0.4)
             split.label(text='')
-            split.operator(BLENDSYNC_OT_publish.bl_idname)
+            split.operator(OBJECT_OT_blendsyncPublish.bl_idname)
             
         header, panel = self.layout.panel('blendsync_recv', default_closed=False)
         header.use_property_split=False
@@ -70,7 +70,10 @@ class OBJECT_PT_blendsync(Panel):
             layout.prop(obj.blendsync, 'recv_path')
             split = layout.split(factor=0.4)
             split.label(text='')
-            split.operator(BLENDSYNC_OT_subscribe.bl_idname)
+            if not obj.blendsync.poll:
+                split.operator(OBJECT_OT_blendsyncPoll.bl_idname)
+            else:
+                split.operator(OBJECT_OT_blendsyncPoll.bl_idname, text="Polling...")
 
 
 

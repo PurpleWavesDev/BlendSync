@@ -81,12 +81,20 @@ class Client:
             except Exception as err:
                 print(f"Error: Sync communication {str(err)}")
     
+    def publishPath(data_path):
+        if Client.connected:
+            # Send message
+            try:
+                Client.socket.send_multipart([b'>PUB', pickle.dumps(data_path)])
+            except Exception as err:
+                print(f"Error: Sync communication {str(err)}")
 
 
 class Receiver:
     """Receiver thread to receive and process sync commands of other instances"""
     thread = None
     sync_props = {}
+    poll_objects = []
     queue = queue.Queue()
     
     def registerSync(obj: bpy.types.Object, prop: str, address: str) -> int:
@@ -97,6 +105,15 @@ class Receiver:
             del Receiver.sync_props[(obj, prop)]
         except:
             pass
+        
+    def registerPoll(obj):
+        Receiver.poll_objects.append(obj)
+    
+    def unregisterPoll(obj):
+        try:
+            Receiver.poll_objects.remove(obj)
+        except:
+            pass            
         
     def launch(address, port_sub):
         Receiver.thread = Thread(target=Receiver.run, args=(address, port_sub))
@@ -115,7 +132,8 @@ class Receiver:
         osc_sock = context.socket(zmq.SUB)
         osc_sock.connect(f"tcp://{address}:{port_sub}")
         # Filter TODO
-        osc_sock.setsockopt(zmq.SUBSCRIBE, b'/')
+        osc_sock.setsockopt(zmq.SUBSCRIBE, b'/') # OSC Strings
+        osc_sock.setsockopt(zmq.SUBSCRIBE, b'>') # Commands
 
         # Poller
         poller = zmq.Poller()
@@ -125,10 +143,9 @@ class Receiver:
             # Poll loop
             if poller.poll(100):
                 # Data received
-                
-                if True:#(poller.pollin(0)): # OSC Message TODO pollin does not exist
-                    # Parse message
-                    try:
+                try:
+                    if True:#(poller.pollin(0)): # OSC Message TODO pollin does not exist
+                        # Parse message
                         data = osc_sock.recv_multipart()
                         osc_msg, osc_data = data[0], pickle.loads(data[1])
                         
@@ -138,9 +155,9 @@ class Receiver:
                         # Register timer
                         if not bpy.app.timers.is_registered(Receiver.updateOnMainthread):
                             bpy.app.timers.register(Receiver.updateOnMainthread)
-                        
-                    except Exception as e:
-                        print(f"Error: Can't read received data ({str(e)})")
+                                        
+                except Exception as e:
+                    print(f"Error: Can't read received data ({str(e)})")
     
         # Clean up connection
         osc_sock.close()
@@ -154,41 +171,56 @@ class Receiver:
             
             # Check if there is an object with this name
             osc_msg = osc_msg.decode("utf-8")
-            obj_name, prop_name = osc_msg.rsplit('/', 1)
-            if obj_name != "" and not obj_name in bpy.data.objects:
-                # Create empty
-                empty = bpy.data.objects.new(obj_name, None)
-                empty.use_fake_user = True
             
-            # Update hidden empties
-            try:
-                obj = bpy.data.objects[obj_name]
-                # Find and update channel
-                match prop_name:
-                    case 'location':
-                        obj.location = osc_data
-                    case 'rotation':
-                        obj.rotation_euler = osc_data
-                    case 'scale':
-                        obj.scale = osc_data
-                    case _:
-                        obj[prop_name] = osc_data
-            except Exception as e:
-                print(f"Error: Can't set property '{prop_name}': {str(e)}")
-            
-            # Dispatch
-            del_list = []
-            for obj_prop, obj_addr in Receiver.sync_props.items():
-                if obj_addr == osc_msg:
-                    try:
-                        obj, prop = obj_prop
-                        setattr(obj, prop, osc_data)
-                    except Exception as e:
-                        del_list.append(obj_prop)
-            # Delete invalid objects
-            for obj in del_list:
-                del Receiver.sync_props[obj]
-
+            if osc_msg[0] == '/':
+                ## OSC Message
+                obj_name, prop_name = osc_msg.rsplit('/', 1)
+                if obj_name != "" and not obj_name in bpy.data.objects:
+                    # Create empty
+                    empty = bpy.data.objects.new(obj_name, None)
+                    empty.use_fake_user = True
+                
+                # Update hidden empties
+                try:
+                    obj = bpy.data.objects[obj_name]
+                    # Find and update channel
+                    match prop_name:
+                        case 'location':
+                            obj.location = osc_data
+                        case 'rotation':
+                            obj.rotation_euler = osc_data
+                        case 'scale':
+                            obj.scale = osc_data
+                        case _:
+                            obj[prop_name] = osc_data
+                except Exception as e:
+                    print(f"Error: Can't set property '{prop_name}': {str(e)}")
+                
+                # Dispatch
+                del_list = []
+                for obj_prop, obj_addr in Receiver.sync_props.items():
+                    if obj_addr == osc_msg:
+                        try:
+                            obj, prop = obj_prop
+                            setattr(obj, prop, osc_data)
+                        except Exception as e:
+                            del_list.append(obj_prop)
+                # Delete invalid objects
+                for obj in del_list:
+                    del Receiver.sync_props[obj]
+                    
+            else:
+                ## Command Message
+                match osc_msg:
+                    case '>PUB':
+                        try:
+                            for obj in Receiver.poll_objects:
+                                obj.blendsync.recv_path = osc_data
+                                obj.blendsync.poll = False
+                        except Exception as e:
+                            print(f"Error: Can't assign published path '{osc_data}'")
+                        finally:
+                            Receiver.poll_objects.clear()
             
         return None
 

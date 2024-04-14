@@ -73,10 +73,10 @@ class BLENDSYNC_OT_launch(Operator):
         return{'CANCELLED'}
 
 
-class BLENDSYNC_OT_publish(Operator):
+class OBJECT_OT_blendsyncPublish(Operator):
     """Publishes a channel or object to all other instances"""
     bl_label = "Publish"
-    bl_idname = "blendsync.publish"
+    bl_idname = "object.blendsync_publish"
     bl_description = "Publishes an channel to all other instances"
     bl_options = {'REGISTER'}
     
@@ -89,39 +89,39 @@ class BLENDSYNC_OT_publish(Operator):
         scn = context.scene
         wm_syncprops = context.window_manager.blendsync
         
-        # Connect first if no connection has been established
+        # Only works when a connection is established
         if wm_syncprops.connected:
-            
-            
+            Client.publishPath(obj.blendsync.send_path)
             return{'FINISHED'}
 
         self.report({"WARNING"}, f"No connection established")
         return{'CANCELLED'}
-    
-class BLENDSYNC_OT_subscribe(Operator):
-    """Subscribes to an object or channel of another instance as soon as will be published"""
-    bl_label = "Subscribe"
-    bl_idname = "blendsync.subscribe"
-    bl_description = "Subscribes to an object or channel of another instance as soon as will be published"
+
+
+class OBJECT_OT_blendsyncPoll(Operator):
+    """Polls the object or channel from another instance when it is published"""
+    bl_label = "Poll"
+    bl_idname = "object.blendsync_poll"
+    bl_description = "Polls the object or channel from another instance when it is published"
     bl_options = {'REGISTER', 'UNDO'}
         
     @classmethod
     def poll(cls, context):
-        return context.object.blendsync.recv_enabled
+        return True
 
     def execute(self, context):
         obj = context.object
         scn = context.scene
-        wm_syncprops = context.window_manager.blendsync
         
-        # Connect first if no connection has been established
-        if wm_syncprops.connected:
+        if not obj.blendsync.poll:
+            # Add to poll list
+            Receiver.registerPoll(obj)
+            obj.blendsync.poll = True
+        else:
+            Receiver.unregisterPoll(obj)
+            obj.blendsync.poll = False
             
-            
-            return{'FINISHED'}
-
-        self.report({"WARNING"}, f"No connection established")
-        return{'CANCELLED'}
+        return{'FINISHED'}
 
 
 
@@ -171,14 +171,48 @@ def updateSync(old_path, new_path):
         return True
     return False
 
+
+## Send/Receive Property Update callbacks
+def SendUpdate(self, context):
+    obj = context.object
+    if self.send_enabled:
+        # Check connection
+        if not Client.connected:
+            Client.connect(launch_server=True) # TODO Default ports or from props?
+        # Register object props
+        enableSync(obj.blendsync.send_path+'/location', obj, 'location')
+        enableSync(obj.blendsync.send_path+'/rotation', obj, 'rotation_euler')
+        enableSync(obj.blendsync.send_path+'/scale', obj, 'scale')
+    else:
+        disableSync(obj.blendsync.send_path+'/location')
+        disableSync(obj.blendsync.send_path+'/rotation')
+        disableSync(obj.blendsync.send_path+'/scale')
+        
+
+def ReceiveUpdate(self, context):
+    obj = context.object
+    if self.recv_enabled:
+        # Check connection
+        if not Client.connected:
+            Client.connect(launch_server=True)
+        # Register object props
+        Receiver.registerSync(obj, 'location', obj.blendsync.recv_path+'/location')
+        Receiver.registerSync(obj, 'rotation_euler', obj.blendsync.recv_path+'/rotation')
+        Receiver.registerSync(obj, 'scale', obj.blendsync.recv_path+'/scale')
+    else:
+        Receiver.unregisterSync(obj, 'location')
+        Receiver.unregisterSync(obj, 'rotation_euler')
+        Receiver.unregisterSync(obj, 'scale')
+
+
 # -------------------------------------------------------------------
 #   Register & Unregister
 # -------------------------------------------------------------------
 
 classes = (
     BLENDSYNC_OT_connect,
-    BLENDSYNC_OT_publish,
-    BLENDSYNC_OT_subscribe,
+    OBJECT_OT_blendsyncPublish,
+    OBJECT_OT_blendsyncPoll,
 )
 
 def register():
