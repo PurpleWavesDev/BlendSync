@@ -13,3 +13,6 @@
 
 # Logs etc
 *.log
+
+# Blender
+*.blend

@@ -68,10 +68,11 @@ class OBJECT_PT_blendsync(Panel):
         if panel:
             panel.enabled=obj.blendsync.recv_enabled
             layout.prop(obj.blendsync, 'recv_path')
-            split = layout.split(factor=0.4)
+            split = layout.split(factor=0.4, align=True)
             split.label(text='')
             if not obj.blendsync.poll:
-                split.operator(OBJECT_OT_blendsyncPoll.bl_idname)
+                split.operator(OBJECT_OT_blendsyncPoll.bl_idname, text="Poll Receive").recv_only=True
+                split.operator(OBJECT_OT_blendsyncPoll.bl_idname, text="Poll both").recv_only=False
             else:
                 split.operator(OBJECT_OT_blendsyncPoll.bl_idname, text="Polling...")
 

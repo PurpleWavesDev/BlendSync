@@ -82,7 +82,7 @@ class OBJECT_OT_blendsyncPublish(Operator):
     
     @classmethod
     def poll(cls, context):
-        return context.object.blendsync.send_enabled
+        return True
 
     def execute(self, context):
         obj = context.object
@@ -104,6 +104,8 @@ class OBJECT_OT_blendsyncPoll(Operator):
     bl_idname = "object.blendsync_poll"
     bl_description = "Polls the object or channel from another instance when it is published"
     bl_options = {'REGISTER', 'UNDO'}
+    
+    recv_only: BoolProperty(default=False, name="Poll for receive channel only")
         
     @classmethod
     def poll(cls, context):
@@ -115,7 +117,7 @@ class OBJECT_OT_blendsyncPoll(Operator):
         
         if not obj.blendsync.poll:
             # Add to poll list
-            Receiver.registerPoll(obj)
+            Receiver.registerPoll(obj, self.recv_only)
             obj.blendsync.poll = True
         else:
             Receiver.unregisterPoll(obj)
@@ -203,6 +205,14 @@ def ReceiveUpdate(self, context):
         Receiver.unregisterSync(obj, 'location')
         Receiver.unregisterSync(obj, 'rotation_euler')
         Receiver.unregisterSync(obj, 'scale')
+
+def UpdateSendPath(self, context):
+    if len(self.send_path) == 0 or self.send_path[0] != '/':
+        self['send_path'] = '/'+self.send_path
+
+def UpdateRecvPath(self, context):
+    if len(self.recv_path) == 0 or self.recv_path[0] != '/':
+        self['recv_path'] = '/'+self.recv_path
 
 
 # -------------------------------------------------------------------

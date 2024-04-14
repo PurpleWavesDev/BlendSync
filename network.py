@@ -94,7 +94,7 @@ class Receiver:
     """Receiver thread to receive and process sync commands of other instances"""
     thread = None
     sync_props = {}
-    poll_objects = []
+    poll_objects = {}
     queue = queue.Queue()
     
     def registerSync(obj: bpy.types.Object, prop: str, address: str) -> int:
@@ -106,12 +106,12 @@ class Receiver:
         except:
             pass
         
-    def registerPoll(obj):
-        Receiver.poll_objects.append(obj)
+    def registerPoll(obj, recv_only):
+        Receiver.poll_objects[obj] = recv_only
     
     def unregisterPoll(obj):
         try:
-            Receiver.poll_objects.remove(obj)
+            del Receiver.poll_objects[obj]
         except:
             pass            
         
@@ -175,10 +175,8 @@ class Receiver:
             if osc_msg[0] == '/':
                 ## OSC Message
                 obj_name, prop_name = osc_msg.rsplit('/', 1)
-                if obj_name != "" and not obj_name in bpy.data.objects:
-                    # Create empty
-                    empty = bpy.data.objects.new(obj_name, None)
-                    empty.use_fake_user = True
+                # Create empty
+                Receiver.createOscEmpty(obj_name)
                 
                 # Update hidden empties
                 try:
@@ -213,16 +211,28 @@ class Receiver:
                 ## Command Message
                 match osc_msg:
                     case '>PUB':
+                        # Pub message, assign to all pollers
                         try:
-                            for obj in Receiver.poll_objects:
+                            for obj, recv_only in Receiver.poll_objects.items():
                                 obj.blendsync.recv_path = osc_data
+                                if not recv_only:
+                                    obj.blendsync.send_path = osc_data
                                 obj.blendsync.poll = False
                         except Exception as e:
                             print(f"Error: Can't assign published path '{osc_data}'")
                         finally:
                             Receiver.poll_objects.clear()
+                        
+                        # Also create empty if it doesn't exist yet
+                        Receiver.createOscEmpty(osc_data)
             
         return None
+
+    def createOscEmpty(obj_name):
+        if obj_name != "" and not obj_name in bpy.data.objects:
+            empty = bpy.data.objects.new(obj_name, None)
+            empty.is_osc_proxy = True
+            empty.use_fake_user = True
 
 
 class ProxyServer:
