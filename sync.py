@@ -1,5 +1,6 @@
 import math
 import mathutils
+import numpy as np
 import bpy
 from bpy.props import *
 from bpy.types import Operator, Panel, PropertyGroup, UIList
@@ -11,6 +12,7 @@ from .network import *
 # -------------------------------------------------------------------
 #   Global data
 # -------------------------------------------------------------------
+sync_paths = {}
 
 # -------------------------------------------------------------------
 #   Operators
@@ -127,18 +129,47 @@ class BLENDSYNC_OT_subscribe(Operator):
 #   Event handlers
 # -------------------------------------------------------------------
 def depthgraphUpdated(scene):
-    pass
+    global sync_paths
+    del_list = []
+    for path, data in sync_paths.items():
+        obj, prop, last_val = data
+        try:
+            val = getattr(obj, prop)
+            # Cast to list if necessary
+            match type(val):
+                case mathutils.Vector|mathutils.Euler|mathutils.Matrix:
+                    val = list(val)
+            if last_val != val:
+                Client.sendOsc(path, val)
+                sync_paths[path] = (obj, prop, val)
+        except Exception as e:
+            # Object or attribute invalid
+            del_list.append(path)
     
-
-def timerCallback():
-    
-    return 1.0
+    # Delete invalid paths
+    for path in del_list:
+        del sync_paths[path]
 
 
 # -------------------------------------------------------------------
-#   Scene API and Helpers
+#   Sync API
 # -------------------------------------------------------------------
+def enableSync(path, obj, prop):
+    global sync_paths
+    sync_paths[path] = (obj, prop, None)
 
+def disableSync(path):
+    global sync_paths
+    if path in sync_paths:
+        del sync_paths[path]
+
+def updateSync(old_path, new_path):
+    global sync_paths
+    if old_path in sync_paths and not new_path in sync_paths:
+        sync_paths[new_path] = sync_paths[old_path]
+        del sync_paths[old_path]
+        return True
+    return False
 
 # -------------------------------------------------------------------
 #   Register & Unregister
@@ -158,13 +189,9 @@ def register():
     # Event handlers
     #bpy.app.handlers.frame_change_pre.append(frameChange)
     bpy.app.handlers.depsgraph_update_post.append(depthgraphUpdated)
-    bpy.app.timers.register(timerCallback)
 
 
 def unregister():
-    if bpy.app.timers.is_registered(timerCallback):
-        bpy.app.timers.unregister(timerCallback)
-    
     from bpy.utils import unregister_class
     for cls in reversed(classes):
         unregister_class(cls)

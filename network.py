@@ -35,11 +35,13 @@ class Client:
         
         # Launch service if on localhost and port is available
         if address == '127.0.0.1' and isPortAvailable(port_pub):
-            ProxyServer.launch(port_pub, port_sub)
-            Client.is_host = True
+            if launch_server:
+                ProxyServer.launch(port_pub, port_sub)
+                Client.is_host = True
+            else:
+                print(f"Error: Local server is not running")
+                return False
             
-        #else:
-
         # Launch receiver
         Client.connected = True
         Receiver.launch(address, port_sub)
@@ -48,54 +50,53 @@ class Client:
         Client.socket = context.socket(zmq.PUB)
         Client.socket.connect(f"tcp://{address}:{port_pub}")
                 
-        # Try to init connectionSend an init message and wait for answer
+        # Ping timer (?)
         #bpy.app.timers.register(Client.ping, first_interval=PING_INTERVAL)
-        time.sleep(1)
-        Client.sendOsc(b'/scene/cube/location', [0.0, 1.0, 2.0])
         return True
-            
-        print(f"Error: Can't connect to server {address}:{port_pub}")
-        return False
 
     def launchServer(port_pub, port_sub) -> bool:
         return True
 
 
     def disconnect():
-        # Unregister ping function
-        #if bpy.app.timers.is_registered(Client.ping):
-        #    bpy.app.timers.unregister(Client.ping)
-
         # Only close with an active connection
         if Client.connected:
+            # Unregister ping function
+            #if bpy.app.timers.is_registered(Client.ping):
+            #    bpy.app.timers.unregister(Client.ping)
+
             Client.connected = False
+            Client.is_host = False
             Client.socket.close()
             # Wait for receiver to finish
             Receiver.join()
     
 
-    def sendOsc(data_path: bytes, obj):
+    def sendOsc(data_path: str, obj):
         if Client.connected:
             # Send message
             try:
-                Client.socket.send_multipart([data_path, pickle.dumps(obj, pickle.HIGHEST_PROTOCOL)])
+                Client.socket.send_multipart([data_path.encode('utf-8'), pickle.dumps(obj, pickle.HIGHEST_PROTOCOL)])
                 
             except Exception as err:
                 print(f"Error: Sync communication {str(err)}")
-                Client.disconnect()
     
 
 
 class Receiver:
     """Receiver thread to receive and process sync commands of other instances"""
     thread = None
+    sync_props = {}
     queue = queue.Queue()
     
-    def registerSync(obj: bpy.types.Object, address: str) -> int:
-        pass
+    def registerSync(obj: bpy.types.Object, prop: str, address: str) -> int:
+        Receiver.sync_props[(obj, prop)] = address
 
-    def unregisterSync(obj: bpy.types.Object):        
-        pass
+    def unregisterSync(obj: bpy.types.Object, prop: str):
+        try:
+            del Receiver.sync_props[(obj, prop)]
+        except:
+            pass
         
     def launch(address, port_sub):
         Receiver.thread = Thread(target=Receiver.run, args=(address, port_sub))
@@ -132,7 +133,6 @@ class Receiver:
                         osc_msg, osc_data = data[0], pickle.loads(data[1])
                         
                         # Store in queue
-                        print(f"OSC: {osc_msg} {osc_data}")
                         Receiver.queue.put_nowait((osc_msg, osc_data))
                         
                         # Register timer
@@ -153,7 +153,8 @@ class Receiver:
             # Path from other instances is /<scene>/<obj>/channel
             
             # Check if there is an object with this name
-            obj_name, prop_name = osc_msg.decode("utf-8").rsplit('/', 1)
+            osc_msg = osc_msg.decode("utf-8")
+            obj_name, prop_name = osc_msg.rsplit('/', 1)
             if obj_name != "" and not obj_name in bpy.data.objects:
                 # Create empty
                 empty = bpy.data.objects.new(obj_name, None)
@@ -176,7 +177,18 @@ class Receiver:
                 print(f"Error: Can't set property '{prop_name}': {str(e)}")
             
             # Dispatch
-            
+            del_list = []
+            for obj_prop, obj_addr in Receiver.sync_props.items():
+                if obj_addr == osc_msg:
+                    try:
+                        obj, prop = obj_prop
+                        setattr(obj, prop, osc_data)
+                    except Exception as e:
+                        del_list.append(obj_prop)
+            # Delete invalid objects
+            for obj in del_list:
+                del Receiver.sync_props[obj]
+
             
         return None
 

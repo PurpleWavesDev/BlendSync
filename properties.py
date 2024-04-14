@@ -2,17 +2,44 @@ import bpy
 from bpy.types import Scene, Object, WindowManager, PropertyGroup
 from bpy.props import *
 
-from .network import Client, PORT_SERVER_RECV, PORT_SERVER_SEND
-
+from .network import Client, Receiver, PORT_SERVER_RECV, PORT_SERVER_SEND
+from .sync import enableSync, disableSync
 
 ## Poll functions
 
 ## Update callbacks
 def SendUpdate(self, context):
-    pass
+    obj = context.object
+    if self.send_enabled:
+        # Check connection
+        if not Client.connected:
+            Client.connect(launch_server=True) # TODO Default ports or from props?
+        # Register object props
+        enableSync(obj.blendsync.send_path+'/location', obj, 'location')
+        enableSync(obj.blendsync.send_path+'/rotation', obj, 'rotation_euler')
+        enableSync(obj.blendsync.send_path+'/scale', obj, 'scale')
+    else:
+        disableSync(obj.blendsync.send_path+'/location')
+        disableSync(obj.blendsync.send_path+'/rotation')
+        disableSync(obj.blendsync.send_path+'/scale')
+        
+        
 
 def ReceiveUpdate(self, context):
-    pass
+    obj = context.object
+    if self.recv_enabled:
+        # Check connection
+        if not Client.connected:
+            Client.connect(launch_server=True)
+        # Register object props
+        Receiver.registerSync(obj, 'location', obj.blendsync.recv_path+'/location')
+        Receiver.registerSync(obj, 'rotation_euler', obj.blendsync.recv_path+'/rotation')
+        Receiver.registerSync(obj, 'scale', obj.blendsync.recv_path+'/scale')
+    else:
+        Receiver.unregisterSync(obj, 'location')
+        Receiver.unregisterSync(obj, 'rotation_euler')
+        Receiver.unregisterSync(obj, 'scale')
+
 
 
 ## Property classes
