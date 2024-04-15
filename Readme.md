@@ -14,7 +14,7 @@ The BlendSync-Panel is located in the object properties.
 For known channels, BlendSync provides Proxy-Objects with the address as name and the properties assigned to the object. Configure the constraint to your liking and select the corresponding object to access the synchronization data.
 
 
-### Nodes
+### Nodes and drivers
 
 **WIP**
 

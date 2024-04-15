@@ -205,7 +205,12 @@ class Receiver:
                         
             if osc_msg[0] == '/':
                 ## OSC Message
+                # Check for special cases
+                if len(osc_msg) == 1:
+                    osc_msg = "/default/default"
                 obj_name, prop_name = osc_msg.rsplit('/', 1)
+                if obj_name == "": obj_name = "/default"
+                if prop_name == "": prop_name = "default"
                 # Create empty
                 Receiver.createOscEmpty(obj_name)
                 
@@ -223,9 +228,9 @@ class Receiver:
                         case _:
                             obj[prop_name] = osc_data
                     obj.update_tag()
-                    bpy.types.Scene.update_tag()
                     bpy.types.Scene.update_render_engine()
                     bpy.context.view_layer.update()
+                    #bpy.types.Scene.update() # No update or update_tag exists, anything else?
                     
                 except Exception as e:
                     print(f"Error: Can't set property '{prop_name}': {str(e)}")
